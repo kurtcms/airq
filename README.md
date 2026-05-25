@@ -1,4 +1,4 @@
-# Docker Compose: Air Quality Monitoring with Home Assistant, MQTT and SCD41
+# Docker Compose: Air Quality Monitoring with Home Assistant, MQTT and Adafruit SCD41
 
 This multi-container Docker app is orchestrated with [Docker Compose](https://docs.docker.com/compose/) for rapid and modular deployment that fits in any homelab and small-scale monitoring environments.
 
@@ -22,7 +22,6 @@ Eclipse Mosquitto
         │ MQTT Discovery
         ▼
 Home Assistant
-        │
         ├── Automation
         ├── Historical Graphs
         └── Notifications
@@ -219,7 +218,6 @@ Example Home Assistant automation for elevated CO2.
       above: 1000
       for:
         minutes: 10
-
   action:
     - service: notify.mobile_app_iphone
       data:
