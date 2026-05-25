@@ -1,0 +1,36 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: airq-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: airq-homeassistant
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - mosquitto
+
+  scd41-collector:
+    build: ./collector
+    container_name: airq-scd41-collector
+    restart: unless-stopped
+    env_file:
+      - .env
+    devices:
+      - /dev/i2c-1:/dev/i2c-1
+    depends_on:
+      - mosquitto
