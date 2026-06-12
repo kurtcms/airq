@@ -34,3 +34,13 @@ services:
       - /dev/i2c-1:/dev/i2c-1
     depends_on:
       - mosquitto
+
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: airq-matter-server
+    restart: unless-stopped
+    network_mode: host
+    security_opt:
+      - apparmor=unconfined
+    volumes:
+      - ./matter:/data

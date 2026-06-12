@@ -1,10 +1,10 @@
-# Docker Compose: Air Quality Monitoring with Home Assistant, MQTT and Adafruit SCD41
+# Docker Compose: Air Quality Monitoring and Automation with Home Assistant, MQTT, Matter and SCD41
 
-This multi-container Docker app is orchestrated with [Docker Compose](https://docs.docker.com/compose/) for rapid and modular deployment that fits in any homelab and small-scale monitoring environments.
+This multi-container Docker app is orchestrated with [Docker Compose](https://docs.docker.com/compose/) for rapid and modular deployment in homelab and small-scale monitoring environments. 
 
-It creates a lightweight indoor air quality monitoring stack using an [Adafruit SCD41](https://www.adafruit.com/product/5190) CO2 sensor connected to a [Raspberry Pi](https://www.raspberrypi.com/) over I2C, with a Python collector publishing measurements to [MQTT](https://mqtt.org/) via [Eclipse Mosquitto](https://mosquitto.org/), and [Home Assistant](https://www.home-assistant.io/) for monitoring, automation and historical visualisation.
+It creates a lightweight indoor air quality monitoring and automation stack using an [Adafruit SCD41](https://www.adafruit.com/product/5190) CO2 sensor connected to a [Raspberry Pi](https://www.raspberrypi.com/) over I2C, [Eclipse Mosquitto](https://mosquitto.org/) for [MQTT](https://mqtt.org/) messaging, [Home Assistant](https://www.home-assistant.io/) for automation and visualisation, and the [Home Assistant Matter Server](https://www.home-assistant.io/integrations/matter/) for integration with [Matter](https://csa-iot.org/all-solutions/matter/)-compatible devices.
 
-The stack is intentionally lightweight and focuses on long-term operational simplicity for small-scale home monitoring deployments.
+The stack is intentionally lightweight and focuses on long-term operational simplicity for small-scale home monitoring and automation deployments.
 
 ## Architecture
 
@@ -22,9 +22,18 @@ Eclipse Mosquitto
         │ MQTT Discovery
         ▼
 Home Assistant
-        ├── Automation
+        │
+        ├── Recorder
         ├── Historical Graphs
-        └── Notifications
+        ├── Notifications
+        ├── Automations
+        │
+        └── Matter
+                │
+                ▼
+        Matter Devices
+        (Fans, HRVs, Air Purifiers,
+         Smart Plugs and Switches)
 ```
 
 The stack avoids additional telemetry infrastructure such as InfluxDB and Grafana in favour of Home Assistant's built-in recorder and visualisation capabilities.
@@ -32,6 +41,8 @@ The stack avoids additional telemetry infrastructure such as InfluxDB and Grafan
 The collector reads CO2, temperature and relative humidity measurements from the Adafruit SCD41 over I2C and publishes the measurements to MQTT via Eclipse Mosquitto.
 
 Home Assistant automatically discovers the MQTT entities, stores historical measurements in SQLite through the recorder integration, and provides automation, graphing and mobile notifications.
+
+The optional Matter server extends the stack beyond monitoring and enables Home Assistant to automate compatible Matter devices based on environmental conditions. For example, ventilation systems, air purifiers or smart fans may be activated automatically when indoor CO2 concentration exceeds a defined threshold.
 
 ## Table of Contents
 
@@ -46,6 +57,7 @@ Home Assistant automatically discovers the MQTT entities, stores historical meas
 - [Home Assistant](#home-assistant)
   - [MQTT Discovery](#mqtt-discovery)
   - [Recorder](#recorder)
+  - [Matter](#matter)
   - [Automation](#automation)
 - [Tailscale](#tailscale)
 - [Backup and Restore](#backup-and-restore)
@@ -205,13 +217,42 @@ recorder:
 
 Only the relevant air quality entities are included in the recorder database.
 
-### Automation
+### Matter
 
-Example Home Assistant automation for elevated CO2.
+The stack includes the Home Assistant Matter Server, allowing Home Assistant to commission and control Matter-compatible devices.
 
 ```yaml
-- id: "co2_high_alert"
-  alias: CO2 High
+matter-server:
+  image: ghcr.io/home-assistant-libs/python-matter-server:stable
+  container_name: airq-matter-server
+  restart: unless-stopped
+  network_mode: host
+  security_opt:
+    - apparmor=unconfined
+  volumes:
+    - ./matter:/data
+```
+
+Matter devices may then be incorporated into Home Assistant automations alongside sensor data collected from the SCD41.
+
+For example:
+
+- Enable a ventilation fan when CO2 exceeds 1000 ppm
+- Activate an air purifier during poor indoor air quality conditions
+- Disable ventilation once CO2 returns to acceptable levels
+- Control smart plugs or switches connected to ventilation equipment
+
+This allows the stack to move beyond passive monitoring and towards automated environmental control.
+
+### Automation
+
+### Automation
+
+Example Home Assistant automation that activates a Matter-compatible ventilation device when indoor CO2 concentration remains elevated and disables it once acceptable conditions have been restored.
+
+```yaml
+- id: "co2_high_ventilation_on"
+  alias: CO2 High Ventilation On
   trigger:
     - platform: numeric_state
       entity_id: sensor.adafruit_scd41_co2
@@ -219,9 +260,24 @@ Example Home Assistant automation for elevated CO2.
       for:
         minutes: 10
   action:
-    - service: notify.mobile_app_iphone
-      data:
-        message: 'CO2 has been above 1000 ppm for 10 mins. Current level: {{ states(''sensor.adafruit_scd41_co2'') }} ppm.'
+    - service: switch.turn_on
+      target:
+        entity_id: switch.bedroom_ventilation
+  mode: single
+
+- id: "co2_high_ventilation_off"
+  alias: CO2 High Ventilation Off
+  trigger:
+    - platform: numeric_state
+      entity_id: sensor.adafruit_scd41_co2
+      below: 800
+      for:
+        minutes: 10
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.bedroom_ventilation
+  mode: single
 ```
 
 ## Tailscale
@@ -267,7 +323,9 @@ $ cp /app/airq/homeassistant/home-assistant_v2.db /backup/
 
 - [Docker Compose](https://docs.docker.com/compose/)
 - [Home Assistant](https://www.home-assistant.io/)
+- [Home Assistant Matter Server](https://www.home-assistant.io/integrations/matter/)
+- [Matter](https://csa-iot.org/all-solutions/matter/)
 - [Eclipse Mosquitto](https://mosquitto.org/)
 - [Adafruit SCD41](https://www.adafruit.com/product/5190)
 - [Tailscale](https://tailscale.com/)
-- [Raspberry Pi Documentation](https://www.raspberrypi.com/documentation/)
+- [Raspberry Pi](https://www.raspberrypi.com/)
